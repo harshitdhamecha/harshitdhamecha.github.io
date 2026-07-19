@@ -93,6 +93,26 @@
      mute Web Audio (YouTube ignores the switch; our synth must match) */
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older iOS */ }
 
+  /* iOS media-activation is granted to clean taps only — a drag forfeits it,
+     so playVideo() from a release can never work directly. Instead, spend the
+     fresh activation at drag START on a muted play+pause: iOS then marks the
+     player user-approved and later programmatic plays succeed. */
+  let ytPrimed = false;
+  const primeYT = () => {
+    if (!ytReady || ytFailed || ytPrimed) return;
+    ytPrimed = true;
+    try {
+      yt.mute();
+      yt.playVideo();
+      yt.pauseVideo();
+      yt.unMute();
+      /* async player: make sure the prime didn't leave it playing */
+      setTimeout(() => {
+        try { if (!playing && yt.getPlayerState() === 1) yt.pauseVideo(); } catch { /* not ready */ }
+      }, 250);
+    } catch { /* player not ready yet — next tap re-primes */ ytPrimed = false; }
+  };
+
   /* iOS unlock: silent one-sample buffer inside the gesture wakes the context */
   const unlockAudio = () => {
     const ac = audioCtx();
@@ -362,6 +382,7 @@
   vinyl.addEventListener('pointerdown', (event) => {
     /* no preventDefault: it strips the user-activation iOS needs for playVideo */
     unlockAudio();
+    primeYT();
     try { vinyl.setPointerCapture(event.pointerId); } catch { /* synthetic pointer */ }
     dragging = true;
     dragDistance = 0;
@@ -466,6 +487,7 @@
     };
     arm.addEventListener('pointerdown', (event) => {
       unlockAudio();
+      primeYT();
       try { arm.setPointerCapture(event.pointerId); } catch { /* synthetic pointer */ }
       armDragging = true;
       arm.classList.add('is-dragging');
