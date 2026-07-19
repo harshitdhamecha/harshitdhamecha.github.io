@@ -18,11 +18,12 @@
   const SONG_SRC = './assets/shady.mp3';
   const SONG_START = 4;
 
-  /* Official embed: Eminem — Without Me (EminemVEVO). Streams through
-     YouTube's licensed player, so the full track is legal on the public
-     site. YT_START = seconds into the official video where the beat drops. */
-  const YT_ID = 'YVkUvmDQ3HY';
-  const YT_START = 47;
+  /* Deck screen: YouTube embed of Without Me (owner-chosen upload).
+     Note: not the official EminemVEVO upload — if it gets taken down the
+     deck degrades gracefully to the synth beat via the onError fallback.
+     Official alternative: YT_ID 'YVkUvmDQ3HY', YT_START ~47. */
+  const YT_ID = 'CuFbDZfUUk4';
+  const YT_START = 110;
   let yt = null;
   let ytReady = false;
   let ytFailed = false;
