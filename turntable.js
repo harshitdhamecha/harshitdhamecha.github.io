@@ -113,7 +113,12 @@
     } catch { /* player not ready yet — next tap re-primes */ ytPrimed = false; }
   };
 
-  /* iOS unlock: silent one-sample buffer inside the gesture wakes the context */
+  /* iOS unlock: silent one-sample buffer inside the gesture wakes the context.
+     PLUS: a silent looping <audio> element — media elements ignore the ringer
+     switch and flip the phone's audio session to playback, which un-mutes
+     Web Audio too. Without this, scratching is silent until the video has
+     played once (video = media element = same session flip). */
+  let silentKeeper = null;
   const unlockAudio = () => {
     const ac = audioCtx();
     if (ac.state === 'suspended') ac.resume();
@@ -122,6 +127,13 @@
     s.buffer = b;
     s.connect(ac.destination);
     s.start(0);
+    if (!silentKeeper) {
+      /* 8 samples of silence as a WAV data URI */
+      silentKeeper = new Audio('data:audio/wav;base64,UklGRjAAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQwAAAAAAAAAAAAAAAAAAAA=');
+      silentKeeper.loop = true;
+      silentKeeper.volume = 0.01;
+      silentKeeper.play().catch(() => { silentKeeper = null; /* retry next gesture */ });
+    }
   };
 
   /* -------- scratch synthesis -------- */
