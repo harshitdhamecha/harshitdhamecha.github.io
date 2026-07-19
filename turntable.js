@@ -23,7 +23,7 @@
      deck degrades gracefully to the synth beat via the onError fallback.
      Official alternative: YT_ID 'YVkUvmDQ3HY', YT_START ~47. */
   const YT_ID = 'CuFbDZfUUk4';
-  const YT_START = 110;
+  const YT_START = 111;
   let yt = null;
   let ytReady = false;
   let ytFailed = false;
