@@ -89,6 +89,10 @@
     return ctx;
   };
 
+  /* iOS 17+: declare ourselves media playback so the silent switch does not
+     mute Web Audio (YouTube ignores the switch; our synth must match) */
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older iOS */ }
+
   /* iOS unlock: silent one-sample buffer inside the gesture wakes the context */
   const unlockAudio = () => {
     const ac = audioCtx();
@@ -417,8 +421,13 @@
       setStatus('Standing by.');
     }
   };
-  vinyl.addEventListener('pointerup', endDrag);
-  vinyl.addEventListener('pointercancel', endDrag);
+  /* Safari only grants user-activation (needed for playVideo) on touchend —
+     pointerup during a captured touch drag does not qualify. Touch releases
+     are handled there; mouse/pen stay on pointerup. */
+  vinyl.addEventListener('pointerup', (e) => { if (e.pointerType !== 'touch') endDrag(); });
+  vinyl.addEventListener('pointercancel', (e) => { if (e.pointerType !== 'touch') endDrag(); });
+  vinyl.addEventListener('touchend', endDrag);
+  vinyl.addEventListener('touchcancel', endDrag);
 
   /* -------- sound lab (?lab=1): audition the four scratch engines -------- */
   if (new URLSearchParams(location.search).has('lab')) {
@@ -462,15 +471,17 @@
       arm.classList.add('is-dragging');
       arm.style.setProperty('--arm-rot', `${armAngleAt(event)}deg`);
     });
+    let lastArmAngle = -24;
     arm.addEventListener('pointermove', (event) => {
       if (!armDragging) return;
-      arm.style.setProperty('--arm-rot', `${armAngleAt(event)}deg`);
+      lastArmAngle = armAngleAt(event);
+      arm.style.setProperty('--arm-rot', `${lastArmAngle}deg`);
     });
-    const armRelease = (event) => {
+    const armRelease = () => {
       if (!armDragging) return;
       armDragging = false;
       arm.classList.remove('is-dragging');
-      const angle = armAngleAt(event);
+      const angle = lastArmAngle;
       /* let the class-driven pose take over and animate to it */
       arm.style.removeProperty('--arm-rot');
       if (angle > 2) {
@@ -481,8 +492,11 @@
         setStatus('Needle up. Standing by.');
       }
     };
-    arm.addEventListener('pointerup', armRelease);
-    arm.addEventListener('pointercancel', armRelease);
+    /* touch releases on touchend (Safari user-activation); mouse on pointerup */
+    arm.addEventListener('pointerup', (e) => { if (e.pointerType !== 'touch') armRelease(); });
+    arm.addEventListener('pointercancel', (e) => { if (e.pointerType !== 'touch') armRelease(); });
+    arm.addEventListener('touchend', armRelease);
+    arm.addEventListener('touchcancel', armRelease);
   }
 
   /* -------- keyboard scratch -------- */
