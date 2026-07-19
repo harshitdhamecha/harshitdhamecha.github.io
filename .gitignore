@@ -1,0 +1,8 @@
+# never publish — copyrighted audio stays local only
+assets/shady.mp3
+
+# local-only files
+_backup-v1/
+design-system/
+CLAUDE.md
+.DS_Store
