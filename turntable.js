@@ -18,6 +18,39 @@
   const SONG_SRC = './assets/shady.mp3';
   const SONG_START = 4;
 
+  /* Official embed: Eminem — Without Me (EminemVEVO). Streams through
+     YouTube's licensed player, so the full track is legal on the public
+     site. YT_START = seconds into the official video where the beat drops. */
+  const YT_ID = 'YVkUvmDQ3HY';
+  const YT_START = 47;
+  let yt = null;
+  let ytReady = false;
+  let ytFailed = false;
+  let ytStarted = false;
+
+  const loadYT = () => {
+    if (document.querySelector('#yt-api')) return;
+    window.onYouTubeIframeAPIReady = () => {
+      yt = new YT.Player('yt-deck', {
+        videoId: YT_ID,
+        playerVars: { start: YT_START, rel: 0, playsinline: 1, controls: 1 },
+        events: {
+          onReady: () => { ytReady = true; },
+          onError: () => { ytFailed = true; },
+          onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED) { ytStarted = false; stop(); } }
+        }
+      });
+    };
+    const s = document.createElement('script');
+    s.id = 'yt-api';
+    s.src = 'https://www.youtube.com/iframe_api';
+    document.head.append(s);
+  };
+  /* lazy: only pull the YT payload once the deck approaches the viewport */
+  new IntersectionObserver((entries, obs) => {
+    entries.forEach((entry) => { if (entry.isIntersecting) { loadYT(); obs.disconnect(); } });
+  }, { rootMargin: '600px' }).observe(root);
+
   let ctx = null;            // AudioContext, created on first gesture (autoplay policy)
   let scratchSrc = null;     // looping noise buffer while dragging
   let scratchGain = null;
@@ -178,7 +211,11 @@
     playing = true;
     root.classList.add('is-playing');
     playBtn.textContent = 'Cut the beat';
-    if (songReady && song) {
+    if (ytReady && !ytFailed) {
+      if (!ytStarted) { yt.seekTo(YT_START, true); ytStarted = true; }
+      yt.playVideo();
+      setStatus('Spinning. Watch the deck screen.');
+    } else if (songReady && song) {
       if (song.currentTime < SONG_START || song.ended) song.currentTime = SONG_START;
       song.onended = stop;
       song.play();
@@ -194,6 +231,7 @@
     playing = false;
     root.classList.remove('is-playing');
     playBtn.textContent = 'Drop the beat';
+    if (ytReady && !ytFailed && yt) yt.pauseVideo();
     if (song) song.pause();
     stopBeat();
     setStatus('Standing by.');
@@ -216,7 +254,10 @@
     lastTime = performance.now();
     lastDir = 0;
     startScratchBed();
-    if (song && playing) song.pause();
+    if (playing) {
+      if (ytReady && !ytFailed && yt) yt.pauseVideo();
+      if (song) song.pause();
+    }
     if (beatTimer) stopBeat();
     setStatus('Scratching…');
   });
@@ -255,9 +296,10 @@
       /* a real scratch — drop the beat */
       play();
     } else if (playing) {
-      if (songReady && song) song.play(); else startBeat();
+      if (ytReady && !ytFailed) { yt.playVideo(); setStatus('Spinning. Watch the deck screen.'); }
+      else if (songReady && song) { song.play(); setStatus('Spinning your record.'); }
+      else { startBeat(); setStatus('Synth beat live.'); }
       idleSpin();
-      setStatus(songReady ? 'Spinning your record.' : 'Synth beat live.');
     } else {
       setStatus('Standing by.');
     }

@@ -94,11 +94,28 @@ const setDialog = (dialog, open) => {
 };
 
 document.querySelectorAll('[data-open-contact]').forEach((trigger) => trigger.addEventListener('click', () => setDialog(contactDialog, true)));
+/* certificate files: probed once at load. Drop assets/cert-<key>.(pdf|png|jpg)
+   into the repo and the dialog swaps its "ask me" note for a View link. */
+const certFiles = {};
+Object.keys(certDetails).forEach(async (key) => {
+  for (const ext of ['pdf', 'jpeg', 'jpg', 'png']) {
+    try {
+      const url = `./assets/cert-${key}.${ext}`;
+      const res = await fetch(url, { method: 'HEAD' });
+      if (res.ok) { certFiles[key] = url; break; }
+    } catch { /* offline */ }
+  }
+});
+
 document.querySelectorAll('[data-cert]').forEach((card) => card.addEventListener('click', () => {
   const detail = certDetails[card.dataset.cert];
   certDialog.querySelector('[data-cert-provider]').textContent = detail.provider;
   certDialog.querySelector('[data-cert-title]').textContent = detail.title;
   certDialog.querySelector('[data-cert-description]').textContent = detail.description;
+  const file = certFiles[card.dataset.cert];
+  certDialog.querySelector('[data-cert-actions]').hidden = !file;
+  certDialog.querySelector('[data-cert-note]').hidden = !!file;
+  if (file) certDialog.querySelector('[data-cert-view]').href = file;
   setDialog(certDialog, true);
 }));
 document.querySelectorAll('[data-close-dialog]').forEach((button) => button.addEventListener('click', () => setDialog(activeDialog, false)));

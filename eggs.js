@@ -161,14 +161,14 @@
     });
   }
 
-  /* --- select the hero headline: good taste --- */
+  /* --- select the manifesto lead: good taste (headings are unselectable) --- */
   let tasteShown = false;
   document.addEventListener('selectionchange', () => {
     if (tasteShown) return;
     const sel = document.getSelection();
     if (!sel || sel.isCollapsed || sel.toString().length < 6) return;
-    const hero = document.querySelector('.hero-title');
-    if (hero && sel.anchorNode && hero.contains(sel.anchorNode)) {
+    const lead = document.querySelector('.lead');
+    if (lead && sel.anchorNode && lead.contains(sel.anchorNode)) {
       tasteShown = true;
       toast('good taste.');
     }

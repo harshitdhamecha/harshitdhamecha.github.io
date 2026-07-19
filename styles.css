@@ -79,3 +79,19 @@ html.shady-mode .ticker{background:var(--coral)}
 html.shady-mode .ticker-track span{color:#0b0d12}
 @media (max-width:760px){.ticker{transform:rotate(-1.2deg) scale(1.06)}.ticker-track span{font-size:18px}.timeline-line{display:none}}
 @media (prefers-reduced-motion:reduce){.ticker-track{transform:none}}
+
+/* ============ display text: not selectable ============ */
+.hero-title,.display,.section-label,.eyebrow,.hero-kicker,.hero-index,
+.ticker,.ticker-track,.footer-orbit,.orbital-card,
+.cap-card h3,.card-number,.capability-note,
+.cert h3,.cert-type,.cert-arrow,
+.skill-cloud,.job-meta,.job-company,.job h3,.tag-row,
+.tt-label,.tt-status,.tt-btn,.brand,.site-header nav,
+.footer-bottom,.footer .eyebrow,.round-link,.dialog h2{
+  user-select:none;-webkit-user-select:none
+}
+
+/* ============ deck screen (official embed) ============ */
+.tt-screen{margin-left:auto;width:min(250px,44vw);aspect-ratio:16/9;background:#000;border:3px solid #000;box-shadow:6px 6px 0 var(--blue);transform:rotate(1.2deg)}
+.tt-screen iframe{display:block;width:100%;height:100%}
+@media (max-width:760px){.tt-screen{width:100%;margin-left:0;margin-top:14px;transform:rotate(0deg)}}
