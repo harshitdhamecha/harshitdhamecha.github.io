@@ -23,7 +23,7 @@
      deck degrades gracefully to the synth beat via the onError fallback.
      Official alternative: YT_ID 'YVkUvmDQ3HY', YT_START ~47. */
   const YT_ID = 'CuFbDZfUUk4';
-  const YT_START = 111;
+  const YT_START = 115;
   let yt = null;
   let ytReady = false;
   let ytFailed = false;
@@ -96,19 +96,20 @@
     return buf;
   };
 
+  let scratchFilter = null;
   const startScratchBed = () => {
     const ac = audioCtx();
     if (scratchSrc) return;
     scratchSrc = ac.createBufferSource();
     scratchSrc.buffer = noiseBuffer(ac, 1);
     scratchSrc.loop = true;
-    const filter = ac.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = 900;
-    filter.Q.value = 1.4;
+    scratchFilter = ac.createBiquadFilter();
+    scratchFilter.type = 'bandpass';
+    scratchFilter.frequency.value = 400;
+    scratchFilter.Q.value = 4.5; /* resonant = vinyl friction, not static */
     scratchGain = ac.createGain();
     scratchGain.gain.value = 0;
-    scratchSrc.connect(filter).connect(scratchGain).connect(ac.destination);
+    scratchSrc.connect(scratchFilter).connect(scratchGain).connect(ac.destination);
     scratchSrc.start();
   };
 
@@ -120,23 +121,35 @@
     scratchGain = null;
   };
 
-  /* the "chik": short bandpass noise burst with a falling sweep */
+  /* the "chik": two layers — resonant vinyl-friction noise sweep plus a
+     quick pitch-drop "wow", which is what a real crossfader cut sounds like */
   const chik = (strength = 1) => {
     const ac = audioCtx();
-    const src = ac.createBufferSource();
-    src.buffer = noiseBuffer(ac, 0.12);
-    src.playbackRate.value = 1.4 + strength * 0.8;
-    const filter = ac.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = 2.2;
-    filter.frequency.setValueAtTime(2100, ac.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(500, ac.currentTime + 0.1);
-    const gain = ac.createGain();
-    gain.gain.setValueAtTime(0.65 * Math.min(strength, 1.4), ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.11);
-    src.connect(filter).connect(gain).connect(ac.destination);
-    src.start();
-    src.stop(ac.currentTime + 0.13);
+    const t = ac.currentTime;
+    const s = Math.min(strength, 1.6);
+    /* friction layer */
+    const noise = ac.createBufferSource();
+    noise.buffer = noiseBuffer(ac, 0.16);
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 7;
+    bp.frequency.setValueAtTime(1400 + s * 500, t);
+    bp.frequency.exponentialRampToValueAtTime(240, t + 0.12);
+    const ng = ac.createGain();
+    ng.gain.setValueAtTime(0.55 * s, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+    noise.connect(bp).connect(ng).connect(ac.destination);
+    noise.start(t); noise.stop(t + 0.16);
+    /* pitch wow layer */
+    const osc = ac.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(400 + s * 170, t);
+    osc.frequency.exponentialRampToValueAtTime(85, t + 0.1);
+    const og = ac.createGain();
+    og.gain.setValueAtTime(0.3 * s, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+    osc.connect(og).connect(ac.destination);
+    osc.start(t); osc.stop(t + 0.12);
   };
 
   /* -------- synth beat fallback (~112 BPM, 8-step) -------- */
@@ -278,11 +291,13 @@
     vinyl.style.setProperty('--tt-rot', `${rotation}deg`);
 
     if (scratchGain && scratchSrc) {
-      scratchGain.gain.value = Math.min(velocity * 1.15, 0.5);
+      /* louder + filter tracks hand speed — the "vvvt" pitch follow */
+      scratchGain.gain.value = Math.min(velocity * 1.9, 0.65);
       scratchSrc.playbackRate.value = 0.55 + Math.min(velocity * 2.4, 2.4);
+      if (scratchFilter) scratchFilter.frequency.value = 260 + Math.min(velocity * 2.2, 1) * 1500;
     }
     const dir = Math.sign(delta);
-    if (dir !== 0 && lastDir !== 0 && dir !== lastDir && velocity > 0.08) chik(velocity * 3);
+    if (dir !== 0 && lastDir !== 0 && dir !== lastDir && velocity > 0.05) chik(0.6 + velocity * 3);
     if (dir !== 0) lastDir = dir;
 
     lastAngle = angle;
