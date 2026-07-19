@@ -95,3 +95,8 @@ html.shady-mode .ticker-track span{color:#0b0d12}
 .tt-screen{margin-left:auto;width:min(250px,44vw);aspect-ratio:16/9;background:#000;border:3px solid #000;box-shadow:6px 6px 0 var(--blue);transform:rotate(1.2deg)}
 .tt-screen iframe{display:block;width:100%;height:100%}
 @media (max-width:760px){.tt-screen{width:100%;margin-left:0;margin-top:14px;transform:rotate(0deg)}}
+
+/* ============ inline certificate preview ============ */
+.cert-dialog{max-height:88vh;overflow:auto}
+.cert-preview{display:block;width:100%;max-height:44vh;object-fit:contain;margin:22px 0 0;border:3px solid var(--ink);background:#fff;box-shadow:6px 6px 0 rgba(11,13,18,.15)}
+.cert-preview[hidden]{display:none}
