@@ -89,6 +89,17 @@
     return ctx;
   };
 
+  /* iOS unlock: silent one-sample buffer inside the gesture wakes the context */
+  const unlockAudio = () => {
+    const ac = audioCtx();
+    if (ac.state === 'suspended') ac.resume();
+    const b = ac.createBuffer(1, 1, 22050);
+    const s = ac.createBufferSource();
+    s.buffer = b;
+    s.connect(ac.destination);
+    s.start(0);
+  };
+
   /* -------- scratch synthesis -------- */
   const noiseBuffer = (ac, seconds) => {
     const buf = ac.createBuffer(1, ac.sampleRate * seconds, ac.sampleRate);
@@ -304,6 +315,16 @@
       if (!ytStarted) { yt.seekTo(YT_START, true); ytStarted = true; }
       yt.playVideo();
       setStatus('Spinning. Watch the deck screen.');
+      /* iOS may silently refuse programmatic playback: verify, else drop synth */
+      setTimeout(() => {
+        if (!playing) return;
+        let state = -9;
+        try { state = yt.getPlayerState(); } catch { /* not ready */ }
+        if (state !== 1 && state !== 3 && !beatTimer) {
+          startBeat();
+          setStatus('Synth beat live. Tap the deck screen for the video.');
+        }
+      }, 650);
     } else if (songReady && song) {
       if (song.currentTime < SONG_START || song.ended) song.currentTime = SONG_START;
       song.onended = stop;
@@ -335,7 +356,8 @@
   };
 
   vinyl.addEventListener('pointerdown', (event) => {
-    event.preventDefault();
+    /* no preventDefault: it strips the user-activation iOS needs for playVideo */
+    unlockAudio();
     try { vinyl.setPointerCapture(event.pointerId); } catch { /* synthetic pointer */ }
     dragging = true;
     dragDistance = 0;
@@ -434,7 +456,7 @@
       return Math.max(-32, Math.min(20, deg));
     };
     arm.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
+      unlockAudio();
       try { arm.setPointerCapture(event.pointerId); } catch { /* synthetic pointer */ }
       armDragging = true;
       arm.classList.add('is-dragging');
