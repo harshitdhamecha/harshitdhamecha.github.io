@@ -34,6 +34,7 @@
     window.onYouTubeIframeAPIReady = () => {
       yt = new YT.Player('yt-deck', {
         videoId: YT_ID,
+        host: 'https://www.youtube-nocookie.com', /* cookie-free playback: not tied to the visitor's YT account/plan */
         playerVars: { start: YT_START, rel: 0, playsinline: 1, controls: 1 },
         events: {
           onReady: () => { ytReady = true; },
@@ -96,17 +97,38 @@
     return buf;
   };
 
+  /* ---- scratch sound lab: four engines, pick with ?lab=1, persists ---- */
+  const SCRATCH_MODE = localStorage.getItem('scratchMode') || 'baby';
   let scratchFilter = null;
+
+  /* tonal buffer for baby/cut: three detuned saws through a formant filter —
+     sounds like actual record content being rubbed */
+  let tonalBuf = null;
+  const getTonalBuffer = (ac) => {
+    if (tonalBuf) return tonalBuf;
+    const len = Math.floor(ac.sampleRate * 0.4);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) {
+      const t = i / ac.sampleRate;
+      const saw = (f) => 2 * ((t * f) % 1) - 1;
+      d[i] = (saw(196) + saw(247) * 0.8 + saw(294) * 0.6) * 0.22 * (0.6 + 0.4 * Math.sin(t * 34));
+    }
+    tonalBuf = buf;
+    return buf;
+  };
+
   const startScratchBed = () => {
     const ac = audioCtx();
     if (scratchSrc) return;
     scratchSrc = ac.createBufferSource();
-    scratchSrc.buffer = noiseBuffer(ac, 1);
+    const tonal = SCRATCH_MODE === 'baby' || SCRATCH_MODE === 'cut';
+    scratchSrc.buffer = tonal ? getTonalBuffer(ac) : noiseBuffer(ac, 1);
     scratchSrc.loop = true;
     scratchFilter = ac.createBiquadFilter();
     scratchFilter.type = 'bandpass';
-    scratchFilter.frequency.value = 400;
-    scratchFilter.Q.value = 4.5; /* resonant = vinyl friction, not static */
+    scratchFilter.frequency.value = tonal ? 900 : 400;
+    scratchFilter.Q.value = tonal ? 1.2 : 4.5;
     scratchGain = ac.createGain();
     scratchGain.gain.value = 0;
     scratchSrc.connect(scratchFilter).connect(scratchGain).connect(ac.destination);
@@ -121,18 +143,12 @@
     scratchGain = null;
   };
 
-  /* the "chik": two layers — resonant vinyl-friction noise sweep plus a
-     quick pitch-drop "wow", which is what a real crossfader cut sounds like */
-  const chik = (strength = 1) => {
-    const ac = audioCtx();
-    const t = ac.currentTime;
-    const s = Math.min(strength, 1.6);
-    /* friction layer */
+  /* ---- chik engines ---- */
+  const chikRub = (ac, t, s) => {
     const noise = ac.createBufferSource();
     noise.buffer = noiseBuffer(ac, 0.16);
     const bp = ac.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 7;
+    bp.type = 'bandpass'; bp.Q.value = 7;
     bp.frequency.setValueAtTime(1400 + s * 500, t);
     bp.frequency.exponentialRampToValueAtTime(240, t + 0.12);
     const ng = ac.createGain();
@@ -140,7 +156,6 @@
     ng.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
     noise.connect(bp).connect(ng).connect(ac.destination);
     noise.start(t); noise.stop(t + 0.16);
-    /* pitch wow layer */
     const osc = ac.createOscillator();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(400 + s * 170, t);
@@ -150,6 +165,66 @@
     og.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
     osc.connect(og).connect(ac.destination);
     osc.start(t); osc.stop(t + 0.12);
+  };
+
+  const chikBaby = (ac, t, s) => {
+    /* forward rub then quick pullback — two pitched bursts of the tonal buffer */
+    const burst = (at, rate, dur, vol) => {
+      const src = ac.createBufferSource();
+      src.buffer = getTonalBuffer(ac);
+      src.playbackRate.setValueAtTime(rate, at);
+      src.playbackRate.exponentialRampToValueAtTime(Math.max(rate * 0.45, 0.2), at + dur);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(vol, at);
+      g.gain.exponentialRampToValueAtTime(0.001, at + dur);
+      src.connect(g).connect(ac.destination);
+      src.start(at); src.stop(at + dur + 0.02);
+    };
+    burst(t, 1.8 + s * 0.9, 0.09, 0.5 * s);
+    burst(t + 0.085, 1.1 + s * 0.5, 0.07, 0.38 * s);
+  };
+
+  const chikCut = (ac, t, s) => {
+    /* transformer: one pitched burst chopped by a hard gate */
+    const src = ac.createBufferSource();
+    src.buffer = getTonalBuffer(ac);
+    src.playbackRate.setValueAtTime(2 + s, t);
+    src.playbackRate.exponentialRampToValueAtTime(0.7, t + 0.16);
+    const g = ac.createGain();
+    [0, 0.04, 0.08, 0.12].forEach((o, i) => {
+      g.gain.setValueAtTime(i % 2 ? 0.0001 : 0.5 * s, t + o);
+      g.gain.setValueAtTime(i % 2 ? 0.5 * s : 0.0001, t + o + 0.028);
+    });
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.17);
+    src.connect(g).connect(ac.destination);
+    src.start(t); src.stop(t + 0.19);
+  };
+
+  const chikWiki = (ac, t, s) => {
+    /* vocal "wik": noise through two formant peaks, both sweeping down */
+    const noise = ac.createBufferSource();
+    noise.buffer = noiseBuffer(ac, 0.14);
+    const f1 = ac.createBiquadFilter();
+    const f2 = ac.createBiquadFilter();
+    f1.type = 'bandpass'; f1.Q.value = 9;
+    f2.type = 'bandpass'; f2.Q.value = 9;
+    f1.frequency.setValueAtTime(700 + s * 150, t);
+    f1.frequency.exponentialRampToValueAtTime(280, t + 0.11);
+    f2.frequency.setValueAtTime(1900 + s * 300, t);
+    f2.frequency.exponentialRampToValueAtTime(700, t + 0.11);
+    const g1 = ac.createGain(); const g2 = ac.createGain();
+    g1.gain.setValueAtTime(0.5 * s, t); g2.gain.setValueAtTime(0.35 * s, t);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    noise.connect(f1).connect(g1).connect(ac.destination);
+    noise.connect(f2).connect(g2).connect(ac.destination);
+    noise.start(t); noise.stop(t + 0.14);
+  };
+
+  const CHIK_ENGINES = { rub: chikRub, baby: chikBaby, cut: chikCut, wiki: chikWiki };
+  const chik = (strength = 1) => {
+    const ac = audioCtx();
+    (CHIK_ENGINES[SCRATCH_MODE] || chikBaby)(ac, ac.currentTime, Math.min(strength, 1.6));
   };
 
   /* -------- synth beat fallback (~112 BPM, 8-step) -------- */
@@ -294,7 +369,7 @@
       /* louder + filter tracks hand speed — the "vvvt" pitch follow */
       scratchGain.gain.value = Math.min(velocity * 1.9, 0.65);
       scratchSrc.playbackRate.value = 0.55 + Math.min(velocity * 2.4, 2.4);
-      if (scratchFilter) scratchFilter.frequency.value = 260 + Math.min(velocity * 2.2, 1) * 1500;
+      if (scratchFilter && (SCRATCH_MODE === 'rub' || SCRATCH_MODE === 'wiki')) scratchFilter.frequency.value = 260 + Math.min(velocity * 2.2, 1) * 1500;
     }
     const dir = Math.sign(delta);
     if (dir !== 0 && lastDir !== 0 && dir !== lastDir && velocity > 0.05) chik(0.6 + velocity * 3);
@@ -322,6 +397,28 @@
   };
   vinyl.addEventListener('pointerup', endDrag);
   vinyl.addEventListener('pointercancel', endDrag);
+
+  /* -------- sound lab (?lab=1): audition the four scratch engines -------- */
+  if (new URLSearchParams(location.search).has('lab')) {
+    const panel = document.createElement('div');
+    panel.style.cssText = 'position:fixed;left:14px;bottom:14px;z-index:70;background:#0b0d12;color:#f5f0e8;border:3px solid #d9ff38;padding:12px;font:700 12px "Space Grotesk",sans-serif;display:grid;gap:6px;min-width:180px';
+    panel.innerHTML = '<span style="letter-spacing:.08em">SCRATCH LAB — now: ' + SCRATCH_MODE.toUpperCase() + '</span>';
+    [['baby', 'Baby scratch (tonal rub)'], ['cut', 'Crossfader cut'], ['wiki', 'Wiki-wiki (vocal)'], ['rub', 'Vinyl rub (noise)']].forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = (key === SCRATCH_MODE ? '● ' : '○ ') + label;
+      b.style.cssText = 'text-align:left;background:#f5f0e8;color:#0b0d12;border:2px solid #000;padding:8px;font:700 12px "Space Grotesk",sans-serif;cursor:pointer';
+      b.addEventListener('click', () => {
+        localStorage.setItem('scratchMode', key);
+        /* preview three chiks in this engine, then reload so the deck uses it */
+        const ac = audioCtx();
+        [0, 0.22, 0.4].forEach((o, i) => (CHIK_ENGINES[key])(ac, ac.currentTime + o, 1 + i * 0.2));
+        setTimeout(() => location.reload(), 900);
+      });
+      panel.append(b);
+    });
+    document.body.append(panel);
+  }
 
   /* -------- draggable tonearm: drop the needle to play, lift to stop -------- */
   const arm = root.querySelector('[data-arm]');
